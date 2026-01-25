@@ -9,8 +9,8 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
     btn.classList.add('active');
     currentMode = btn.dataset.mode;
     document.getElementById('chartContainer').style.display = 'none';
+    document.getElementById('chartContainer').classList.remove('doughnut-mode');
     document.getElementById('downloadChart').style.display = 'none';
-    // Clear previous chart
     d3.select('#chartCanvas').selectAll('*').remove();
     d3.select('#customLegend').html('');
     currentSvg = null;
@@ -308,7 +308,7 @@ function createDoughnutChart(data) {
     'perplexity.ai': 'icons/perplexity-icon.svg',
     'claude.ai': 'icons/claude-icon.svg',
     'grok.com': 'icons/grok-icon.svg',
-    'poe.com': 'icons/poe-color.svg'
+    'poe.com': 'icons/poe-icon.svg'
   };
 
   const chartData = sources.map((source, i) => ({
