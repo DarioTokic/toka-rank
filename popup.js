@@ -28,21 +28,32 @@ document.getElementById('downloadChart').addEventListener('click', () => {
 
   if (currentMode === 'breakdown') {
     // For doughnut chart, capture the entire container including legend
-    html2canvas(document.getElementById('chartContainer')).then(canvas => {
-      const url = canvas.toDataURL('image/png');
+    html2canvas(document.getElementById('chartContainer'), {
+      scale: 6,
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true
+    }).then(canvas => {
+      const url = canvas.toDataURL('image/png', 1.0);
       const link = document.createElement('a');
       link.download = `tokarank-${currentMode}-${Date.now()}.png`;
       link.href = url;
       link.click();
     });
   } else {
-    // For line chart, just capture the canvas
-    const canvas = document.getElementById('chartCanvas');
-    const url = canvas.toDataURL('image/png');
-    const link = document.createElement('a');
-    link.download = `tokarank-${currentMode}-${Date.now()}.png`;
-    link.href = url;
-    link.click();
+    // For line chart, capture the canvas
+    html2canvas(document.getElementById('chartCanvas'), {
+      scale: 6,
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true
+    }).then(canvas => {
+      const url = canvas.toDataURL('image/png', 1.0);
+      const link = document.createElement('a');
+      link.download = `tokarank-${currentMode}-${Date.now()}.png`;
+      link.href = url;
+      link.click();
+    });
   }
 });
 
@@ -227,23 +238,23 @@ function createDoughnutChart(data) {
   // Map sources to brand colors
   const colorMap = {
     'chatgpt.com': '#74AA9C',
-    'copilot.microsoft.com': '#1C8CF2',
+    'perplexity.ai': '#1C8CF2',
     'gemini.google.com': '#4796E3',
-    'perplexity.ai': '#111111',
-    'claude.ai': '#DA7756',
-    'grok.com': '#6B4CD6',
+    'copilot.microsoft.com': '#6B4CD6',
+    'claude.ai': '#DA7A59',
+    'grok.com': '#111111',
     'poe.com': '#B92B27'
   };
   
   // Map sources to icon files
   const iconMap = {
-    'chatgpt.com': 'chatgpt-icon.svg',
-    'copilot.microsoft.com': 'copilot-icon.svg',
-    'gemini.google.com': 'gemini-icon.svg',
-    'perplexity.ai': 'perplexity-icon.svg',
-    'claude.ai': 'claude-icon.svg',
-    'grok.com': 'grok-icon.png',
-    'poe.com': 'poe-icon.png'
+    'chatgpt.com': 'icons/chatgpt-icon.svg',
+    'copilot.microsoft.com': 'icons/copilot-icon.svg',
+    'gemini.google.com': 'icons/google-gemini-icon.svg',
+    'perplexity.ai': 'icons/perplexity-icon.svg',
+    'claude.ai': 'icons/claude-icon.svg',
+    'grok.com': 'icons/grok-icon.svg',
+    'poe.com': 'icons/poe-color.svg'
   };
   
   const colors = sources.map(source => colorMap[source] || '#999999');
@@ -313,7 +324,7 @@ function createDoughnutChart(data) {
           formatter: (value, ctx) => {
             const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
             const percentage = ((value / total) * 100);
-            if (percentage < 10) return '';
+            if (percentage < 5) return '';
             return percentage.toFixed(1) + '%';
           }
         }
