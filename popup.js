@@ -1,11 +1,6 @@
 let currentMode = 'overtime';
 let parsedData = null;
-let currentChart = null;
-
-// Register Chart.js datalabels plugin
-if (typeof ChartDataLabels !== 'undefined') {
-  Chart.register(ChartDataLabels);
-}
+let currentSvg = null;
 
 // Mode toggle
 document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -15,46 +10,45 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
     currentMode = btn.dataset.mode;
     document.getElementById('chartContainer').style.display = 'none';
     document.getElementById('downloadChart').style.display = 'none';
-    if (currentChart) {
-      currentChart.destroy();
-      currentChart = null;
-    }
+    // Clear previous chart
+    d3.select('#chartCanvas').selectAll('*').remove();
+    d3.select('#customLegend').html('');
+    currentSvg = null;
   });
 });
 
 // Download chart button
 document.getElementById('downloadChart').addEventListener('click', () => {
-  if (!currentChart) return;
-
-  if (currentMode === 'breakdown') {
-    // For doughnut chart, capture the entire container including legend
-    html2canvas(document.getElementById('chartContainer'), {
-      scale: 6,
-      backgroundColor: '#ffffff',
-      logging: false,
-      useCORS: true
-    }).then(canvas => {
-      const url = canvas.toDataURL('image/png', 1.0);
-      const link = document.createElement('a');
-      link.download = `tokarank-${currentMode}-${Date.now()}.png`;
-      link.href = url;
-      link.click();
-    });
-  } else {
-    // For line chart, capture the canvas
-    html2canvas(document.getElementById('chartCanvas'), {
-      scale: 6,
-      backgroundColor: '#ffffff',
-      logging: false,
-      useCORS: true
-    }).then(canvas => {
-      const url = canvas.toDataURL('image/png', 1.0);
-      const link = document.createElement('a');
-      link.download = `tokarank-${currentMode}-${Date.now()}.png`;
-      link.href = url;
-      link.click();
-    });
-  }
+  if (!currentSvg) return;
+  
+  // Get the original SVG dimensions
+  const svgNode = currentSvg.node();
+  const viewBox = svgNode.getAttribute('viewBox');
+  const viewBoxValues = viewBox ? viewBox.split(' ') : null;
+  
+  // Use viewBox dimensions if available, otherwise use width/height attributes
+  const origWidth = viewBoxValues ? parseFloat(viewBoxValues[2]) : parseFloat(svgNode.getAttribute('width'));
+  const origHeight = viewBoxValues ? parseFloat(viewBoxValues[3]) : parseFloat(svgNode.getAttribute('height'));
+  
+  // Export dimensions
+  const exportWidth = 3200;
+  const exportHeight = 1800;
+  
+  // Clone and scale the SVG
+  const clone = svgNode.cloneNode(true);
+  clone.setAttribute('width', exportWidth);
+  clone.setAttribute('height', exportHeight);
+  clone.setAttribute('viewBox', `0 0 ${origWidth} ${origHeight}`);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  
+  const svgString = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = `tokarank-${currentMode}-${Date.now()}.svg`;
+  link.href = url;
+  link.click();
+  URL.revokeObjectURL(url);
 });
 
 // Process data button
@@ -119,109 +113,169 @@ function parseBreakdownData(input) {
 }
 
 function createLineChart(data) {
-  if (currentChart) {
-    currentChart.destroy();
-  }
-
   if (!data || data.length === 0) {
     alert('No valid data to display');
     return;
   }
 
+  // Clear previous chart
+  d3.select('#chartCanvas').selectAll('*').remove();
 
-  const labels = data.map(d => d.monthName);
-  const sessions = data.map(d => d.sessions);
+  // Set up dimensions
+  const margin = { top: 60, right: 100, bottom: 60, left: 80 };
+  const width = 700 - margin.left - margin.right;
+  const height = 400 - margin.top - margin.bottom;
 
-  const ctx = document.getElementById('chartCanvas').getContext('2d');
+  // Create SVG
+  const svg = d3.select('#chartCanvas')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .style('background', 'white');
 
-  if (typeof Chart === 'undefined') {
-    alert('Chart.js library not loaded. Please check your internet connection.');
-    return;
-  }
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
 
-  currentChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Sessions',
-        data: sessions,
-        borderColor: '#333333',
-        backgroundColor: '#53ff45',
-        pointBackgroundColor: '#53ff45',
-        pointBorderColor: '#333333',
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        tension: 0.3,
-        fill: false
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        title: {
-          display: true,
-          text: 'AI Traffic Over Time'
-        },
-        legend: {
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            pointStyle: 'circle',
-            boxWidth: 6,
-            boxHeight: 6
-          }
-        },
-        datalabels: {
-          align: 'top',
-          anchor: 'end',
-          formatter: (value) => value,
-          color: '#333333',
-          font: {
-            weight: 'bold',
-            size: 11
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: {
-            display: false,
-            drawBorder: false
-          }
-        },
-        y: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 500
-          },
-          grid: {
-            drawBorder: false
-          },
-          border: {
-            display: false
-          }
-        }
-      }
-    }
-  });
+  // Set up scales
+  const x = d3.scalePoint()
+    .domain(data.map(d => d.monthName))
+    .range([0, width])
+    .padding(0.5);
 
+  const maxSessions = d3.max(data, d => d.sessions);
+  const y = d3.scaleLinear()
+    .domain([0, Math.ceil(maxSessions / 500) * 500])
+    .range([height, 0]);
+
+  // Add grid lines
+  const gridGroup = g.append('g')
+    .attr('class', 'grid')
+    .call(d3.axisLeft(y)
+      .tickSize(-width)
+      .tickFormat('')
+      .ticks(Math.ceil(maxSessions / 500))
+    );
+
+  gridGroup.selectAll('line')
+    .style('stroke', '#cccccc')
+    .style('stroke-opacity', 1);
+
+  gridGroup.select('.domain').remove();
+
+  // Add X axis
+  const xAxis = g.append('g')
+    .attr('transform', `translate(0,${height})`)
+    .call(d3.axisBottom(x));
+
+  xAxis.selectAll('text')
+    .style('font-size', '12px')
+    .style('fill', '#484B5B');
+
+  xAxis.selectAll('line')
+    .style('stroke', '#333333');
+
+  xAxis.select('.domain').remove();
+
+  // Add Y axis
+  const yAxis = g.append('g')
+    .call(d3.axisLeft(y)
+      .ticks(Math.ceil(maxSessions / 500))
+      .tickSize(0)
+      .tickFormat(d => d)
+    );
+
+  yAxis.selectAll('text')
+    .style('font-size', '12px')
+    .style('fill', '#484B5B');
+
+  yAxis.selectAll('line')
+    .style('stroke', '#333333');
+
+  yAxis.select('.domain').remove();
+
+  // Create line generator
+  const line = d3.line()
+    .x(d => x(d.monthName))
+    .y(d => y(d.sessions))
+    .curve(d3.curveCardinal.tension(0.7));
+
+  // Add the line
+  g.append('path')
+    .datum(data)
+    .attr('fill', 'none')
+    .attr('stroke', '#484B5B')
+    .attr('stroke-width', 2)
+    .attr('d', line);
+
+  // Add points
+  g.selectAll('circle')
+    .data(data)
+    .enter()
+    .append('circle')
+    .attr('cx', d => x(d.monthName))
+    .attr('cy', d => y(d.sessions))
+    .attr('r', 5)
+    .attr('fill', '#53ff45')
+    .attr('stroke', '#333333')
+    .attr('stroke-width', 2);
+
+  // Add data labels
+  g.selectAll('.label')
+    .data(data)
+    .enter()
+    .append('text')
+    .attr('class', 'label')
+    .attr('x', d => x(d.monthName))
+    .attr('y', d => y(d.sessions) - 10)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '11px')
+    .style('font-weight', 'bold')
+    .style('fill', '#484B5B')
+    .text(d => d.sessions);
+
+  // Add title
+  svg.append('text')
+    .attr('x', (width + margin.left + margin.right) / 2)
+    .attr('y', 30)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '16px')
+    .style('font-weight', '600')
+    .style('fill', '#484B5B')
+    .text('AI Traffic Over Time');
+
+  // Add legend
+  const legend = svg.append('g')
+    .attr('transform', `translate(${width + margin.left - 80}, 20)`);
+
+  legend.append('circle')
+    .attr('cx', 0)
+    .attr('cy', 0)
+    .attr('r', 3)
+    .attr('fill', '#53ff45')
+    .attr('stroke', '#333333')
+    .attr('stroke-width', 1);
+
+  legend.append('text')
+    .attr('x', 10)
+    .attr('y', 5)
+    .style('font-size', '12px')
+    .style('fill', '#484B5B')
+    .text('Sessions');
+
+  currentSvg = svg;
+  document.getElementById('chartContainer').classList.remove('doughnut-mode');
   document.getElementById('chartContainer').style.display = 'block';
   document.getElementById('downloadChart').style.display = 'inline-block';
   document.getElementById('downloadChart').disabled = false;
 }
 
 function createDoughnutChart(data) {
-  if (currentChart) {
-    currentChart.destroy();
-  }
-
   if (!data || data.length === 0) {
     alert('No valid data to display');
     return;
   }
 
+  // Clear previous chart
+  d3.select('#chartCanvas').selectAll('*').remove();
 
   // Aggregate sessions by source
   const sourceMap = {};
@@ -245,7 +299,7 @@ function createDoughnutChart(data) {
     'grok.com': '#111111',
     'poe.com': '#B92B27'
   };
-  
+
   // Map sources to icon files
   const iconMap = {
     'chatgpt.com': 'icons/chatgpt-icon.svg',
@@ -256,83 +310,199 @@ function createDoughnutChart(data) {
     'grok.com': 'icons/grok-icon.svg',
     'poe.com': 'icons/poe-color.svg'
   };
-  
-  const colors = sources.map(source => colorMap[source] || '#999999');
-  
-  // Create custom legend
+
+  const chartData = sources.map((source, i) => ({
+    source,
+    sessions: sessions[i],
+    color: colorMap[source] || '#999999'
+  }));
+
+  // Create custom legend (HTML version)
   const legendContainer = document.getElementById('customLegend');
   legendContainer.innerHTML = '';
-  sources.forEach((source, index) => {
+  chartData.forEach((d) => {
     const item = document.createElement('div');
     item.className = 'legend-item';
-    
+
     const colorBox = document.createElement('div');
     colorBox.className = 'legend-color';
-    colorBox.style.backgroundColor = colors[index];
-    
+    colorBox.style.backgroundColor = d.color;
+
     const icon = document.createElement('img');
     icon.className = 'legend-icon';
-    icon.src = iconMap[source] || '';
-    icon.alt = source;
-    
+    icon.src = iconMap[d.source] || '';
+    icon.alt = d.source;
+
     item.appendChild(colorBox);
     item.appendChild(icon);
     legendContainer.appendChild(item);
   });
 
-  const ctx = document.getElementById('chartCanvas').getContext('2d');
-
-  if (typeof Chart === 'undefined') {
-    alert('Chart.js library not loaded. Please check your internet connection.');
-    return;
-  }
-
-  currentChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: sources,
-      datasets: [{
-        data: sessions,
-        backgroundColor: colors,
-        borderWidth: 0,
-        spacing: 8,
-        borderRadius: {
-          outerStart: 6,
-          outerEnd: 6,
-          innerStart: 0,
-          innerEnd: 0
-        }
-      }]
-    },
-    options: {
-      responsive: false,
-      maintainAspectRatio: true,
-      plugins: {
-        title: {
-          display: true,
-          text: 'AI Traffic Breakdown by Source'
-        },
-        legend: {
-          display: false
-        },
-        datalabels: {
-          color: '#ffffff',
-          font: {
-            weight: 'normal',
-            size: 16
-          },
-          formatter: (value, ctx) => {
-            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-            const percentage = ((value / total) * 100);
-            if (percentage < 5) return '';
-            return percentage.toFixed(1) + '%';
-          }
-        }
-      }
-    }
+  // Load icons as data URIs for SVG embedding
+  loadIconsAsDataUris(chartData, iconMap).then(iconDataMap => {
+    renderDoughnutSvg(chartData, iconDataMap);
   });
+}
 
+function loadIconsAsDataUris(chartData, iconMap) {
+  const promises = chartData.map(d => {
+    const iconPath = iconMap[d.source];
+    console.log('Loading icon for', d.source, 'from', iconPath);
+    
+    return fetch(iconPath)
+      .then(response => {
+        if (!response.ok) {
+          console.error('Failed to fetch', iconPath, response.status);
+          return { source: d.source, dataUri: '' };
+        }
+        return response.text();
+      })
+      .then(svgText => {
+        if (!svgText || svgText === '') {
+          console.error('Empty SVG for', d.source);
+          return { source: d.source, dataUri: '' };
+        }
+        
+        // Fix SVG attributes - replace em units with actual pixel values
+        svgText = svgText.replace(/width="1em"/g, 'width="24"');
+        svgText = svgText.replace(/height="1em"/g, 'height="24"');
+        
+        // Encode SVG as data URI directly
+        const encoded = btoa(unescape(encodeURIComponent(svgText)));
+        const dataUri = `data:image/svg+xml;base64,${encoded}`;
+        console.log('Successfully encoded icon for', d.source);
+        return { source: d.source, dataUri: dataUri };
+      })
+      .catch(err => {
+        console.error('Error loading icon for', d.source, err);
+        return { source: d.source, dataUri: '' };
+      });
+  });
+  
+  return Promise.all(promises).then(results => {
+    const map = {};
+    results.forEach(r => {
+      map[r.source] = r.dataUri;
+      console.log('Icon data URI length for', r.source, ':', r.dataUri.length);
+    });
+    return map;
+  });
+}
+
+function renderDoughnutSvg(chartData, iconDataMap) {
+  // Set up dimensions - make SVG wider to include legend
+  const chartWidth = 400;
+  const chartHeight = 450; // Increased to give title more room
+  const legendGap = 90; // Increased from 40 to 90
+  const legendWidth = 120; // Increased to prevent overflow
+  const totalWidth = chartWidth + legendGap + legendWidth;
+  const radius = Math.min(chartWidth, 400) / 2; // Use 400 for radius calculation
+
+  // Create SVG
+  const svg = d3.select('#chartCanvas')
+    .attr('width', totalWidth)
+    .attr('height', chartHeight)
+    .attr('viewBox', `0 0 ${totalWidth} ${chartHeight}`)
+    .style('background', 'transparent');
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${chartWidth / 2},${chartHeight / 2 + 25})`);
+
+  // Create pie layout
+  const pie = d3.pie()
+    .value(d => d.sessions)
+    .sort(null);
+
+  // Create arc generator
+  const arc = d3.arc()
+    .innerRadius(radius * 0.45) // Slightly thinner than 0.4
+    .outerRadius(radius * 0.9)
+    .cornerRadius(6)
+    .padAngle(0.01); // Reduced from 0.03 for less spacing
+
+  // Create arcs
+  const arcs = g.selectAll('.arc')
+    .data(pie(chartData))
+    .enter()
+    .append('g')
+    .attr('class', 'arc');
+
+  // Add path for each arc
+  arcs.append('path')
+    .attr('d', arc)
+    .attr('fill', d => d.data.color);
+
+  // Add percentage labels
+  const total = d3.sum(chartData, d => d.sessions);
+  arcs.append('text')
+    .attr('transform', d => `translate(${arc.centroid(d)})`)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '18px')
+    .style('fill', '#ffffff')
+    .text(d => {
+      const percentage = (d.data.sessions / total) * 100;
+      return percentage >= 5 ? percentage.toFixed(1) + '%' : '';
+    });
+
+  // Add title - centered over the entire component (chart + legend)
+  svg.append('text')
+    .attr('x', totalWidth / 2)
+    .attr('y', 30)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '16px')
+    .style('font-weight', '600')
+    .style('fill', '#484B5B')
+    .text('AI Traffic Breakdown by Source');
+
+  currentSvg = svg;
+  
+  // For export: create SVG version of legend with embedded icons
+  createSvgLegend(svg, chartData, iconDataMap, chartWidth, chartHeight);
+  
+  document.getElementById('chartContainer').classList.add('doughnut-mode');
   document.getElementById('chartContainer').style.display = 'flex';
   document.getElementById('downloadChart').style.display = 'inline-block';
   document.getElementById('downloadChart').disabled = false;
+}
+
+function createSvgLegend(svg, chartData, iconDataMap, chartWidth, chartHeight) {
+  // Remove any existing SVG legend first
+  svg.select('.svg-legend').remove();
+  
+  // Calculate spacing - reduced to 300px height
+  const legendHeight = 300;
+  const itemSpacing = legendHeight / (chartData.length - 1);
+  
+  // Center legend at same height as doughnut center
+  const doughnutCenterY = chartHeight / 2 + 25;
+  const legendStartY = doughnutCenterY - ((chartData.length - 1) * itemSpacing) / 2;
+  
+  const legendGroup = svg.append('g')
+    .attr('class', 'svg-legend')
+    .attr('transform', `translate(${chartWidth + 90}, ${legendStartY})`);
+  
+  chartData.forEach((d, i) => {
+    const legendItem = legendGroup.append('g')
+      .attr('transform', `translate(0, ${i * itemSpacing})`);
+    
+    // Color circle
+    legendItem.append('circle')
+      .attr('cx', 8)
+      .attr('cy', 12)
+      .attr('r', 8)
+      .attr('fill', d.color);
+    
+    // Load and embed icon as image with data URI
+    const dataUri = iconDataMap[d.source];
+    console.log('Adding icon for', d.source, 'dataUri exists:', !!dataUri);
+    if (dataUri && dataUri.length > 0) {
+      legendItem.append('image')
+        .attr('x', 24)
+        .attr('y', 0)
+        .attr('width', 24)
+        .attr('height', 24)
+        .attr('href', dataUri)
+        .attr('xlink:href', dataUri); // Try both for compatibility
+    }
+  });
 }
