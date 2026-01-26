@@ -142,8 +142,21 @@ function createLineChart(data) {
     .padding(0);
 
   const maxSessions = d3.max(data, d => d.sessions);
+  
+  // Calculate increment to show approximately 4 ticks
+  const targetTicks = 4;
+  const rawIncrement = maxSessions / targetTicks;
+  // Round to nearest nice number (100, 250, 500, 1000, etc.)
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawIncrement)));
+  const normalized = rawIncrement / magnitude;
+  let niceIncrement;
+  if (normalized <= 1) niceIncrement = magnitude;
+  else if (normalized <= 2) niceIncrement = 2 * magnitude;
+  else if (normalized <= 5) niceIncrement = 5 * magnitude;
+  else niceIncrement = 10 * magnitude;
+  
   const y = d3.scaleLinear()
-    .domain([0, Math.ceil(maxSessions / 500) * 500])
+    .domain([0, Math.ceil(maxSessions / niceIncrement) * niceIncrement])
     .range([height, 0]);
 
   // Add grid lines
@@ -152,7 +165,7 @@ function createLineChart(data) {
     .call(d3.axisLeft(y)
       .tickSize(-width)
       .tickFormat('')
-      .ticks(Math.ceil(maxSessions / 500))
+      .ticks(Math.ceil(maxSessions / niceIncrement))
     );
 
   gridGroup.selectAll('line')
@@ -178,7 +191,7 @@ function createLineChart(data) {
   // Add Y axis
   const yAxis = g.append('g')
     .call(d3.axisLeft(y)
-      .ticks(Math.ceil(maxSessions / 500))
+      .ticks(Math.ceil(maxSessions / niceIncrement))
       .tickSize(0)
       .tickFormat(d => d)
     );
