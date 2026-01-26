@@ -139,7 +139,7 @@ function createLineChart(data) {
   const x = d3.scalePoint()
     .domain(data.map(d => d.monthName))
     .range([0, width])
-    .padding(0.5);
+    .padding(0);
 
   const maxSessions = d3.max(data, d => d.sessions);
   const y = d3.scaleLinear()
@@ -197,6 +197,38 @@ function createLineChart(data) {
     .x(d => x(d.monthName))
     .y(d => y(d.sessions))
     .curve(d3.curveCardinal.tension(0.7));
+
+  // Create area generator for shadow
+  const area = d3.area()
+    .x(d => x(d.monthName))
+    .y0(height)
+    .y1(d => y(d.sessions))
+    .curve(d3.curveCardinal.tension(0.7));
+
+  // Define gradient for shadow
+  const defs = svg.append('defs');
+  const gradient = defs.append('linearGradient')
+    .attr('id', 'line-shadow-gradient')
+    .attr('x1', '0%')
+    .attr('x2', '0%')
+    .attr('y1', '0%')
+    .attr('y2', '100%');
+
+  gradient.append('stop')
+    .attr('offset', '0%')
+    .attr('stop-color', '#484B5B')
+    .attr('stop-opacity', 0.3);
+
+  gradient.append('stop')
+    .attr('offset', '100%')
+    .attr('stop-color', '#484B5B')
+    .attr('stop-opacity', 0);
+
+  // Add shadow area
+  g.append('path')
+    .datum(data)
+    .attr('fill', 'url(#line-shadow-gradient)')
+    .attr('d', area);
 
   // Add the line
   g.append('path')
