@@ -20,35 +20,60 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 // Download chart button
 document.getElementById('downloadChart').addEventListener('click', () => {
   if (!currentSvg) return;
-  
+
   // Get the original SVG dimensions
   const svgNode = currentSvg.node();
   const viewBox = svgNode.getAttribute('viewBox');
   const viewBoxValues = viewBox ? viewBox.split(' ') : null;
-  
+
   // Use viewBox dimensions if available, otherwise use width/height attributes
   const origWidth = viewBoxValues ? parseFloat(viewBoxValues[2]) : parseFloat(svgNode.getAttribute('width'));
   const origHeight = viewBoxValues ? parseFloat(viewBoxValues[3]) : parseFloat(svgNode.getAttribute('height'));
-  
+
   // Export dimensions
   const exportWidth = 3200;
   const exportHeight = 1800;
-  
+
   // Clone and scale the SVG
   const clone = svgNode.cloneNode(true);
   clone.setAttribute('width', exportWidth);
   clone.setAttribute('height', exportHeight);
   clone.setAttribute('viewBox', `0 0 ${origWidth} ${origHeight}`);
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  
+
   const svgString = new XMLSerializer().serializeToString(clone);
   const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.download = `tokarank-${currentMode}-${Date.now()}.svg`;
-  link.href = url;
-  link.click();
-  URL.revokeObjectURL(url);
+  // Use document.title for filename (sanitize it), fallback to 'tokarank'
+  const pageTitle = (document.title || 'tokarank').toString();
+  const sanitized = pageTitle.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase();
+  // Try to get active tab title for filename; requires 'tabs' and 'scripting' permissions in manifest
+  if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs && tabs[0];
+      if (tab && tab.title) {
+        const finalSanitized = (tab.title || pageTitle).toString().split(' - ')[0].replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase();
+        // Format timestamp as DD-MM-YYYY
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const ts = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
+        link.download = `${finalSanitized}-${currentMode === 'overtime' ? 'ai-traffic-over-time' : 'ai-traffic-breakdown-by-source'}-${ts}.svg`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    });
+  } else {
+    // Format timestamp as DD-MM-YYYY-HHMMSS
+    const now2 = new Date();
+    const pad2 = n => String(n).padStart(2, '0');
+    const ts2 = `${pad2(now2.getDate())}-${pad2(now2.getMonth() + 1)}-${now2.getFullYear()}`;
+    link.download = `${sanitized}-${currentMode}-${ts2}.svg`;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 });
 
 // Process data button
@@ -130,6 +155,7 @@ function createLineChart(data) {
   const svg = d3.select('#chartCanvas')
     .attr('width', width + margin.left + margin.right)
     .attr('height', height + margin.top + margin.bottom)
+    .attr('font-family', "'Inter', -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif")
     .style('background', 'white');
 
   const g = svg.append('g')
@@ -142,7 +168,7 @@ function createLineChart(data) {
     .padding(0);
 
   const maxSessions = d3.max(data, d => d.sessions);
-  
+
   // Calculate increment to show approximately 4 ticks
   const targetTicks = 4;
   const rawIncrement = maxSessions / targetTicks;
@@ -154,7 +180,7 @@ function createLineChart(data) {
   else if (normalized <= 2) niceIncrement = 2 * magnitude;
   else if (normalized <= 5) niceIncrement = 5 * magnitude;
   else niceIncrement = 10 * magnitude;
-  
+
   const y = d3.scaleLinear()
     .domain([0, Math.ceil(maxSessions / niceIncrement) * niceIncrement])
     .range([height, 0]);
@@ -181,7 +207,8 @@ function createLineChart(data) {
 
   xAxis.selectAll('text')
     .style('font-size', '12px')
-    .style('fill', '#484B5B');
+    .style('fill', '#484B5B')
+    .style('font-family', '\'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
 
   xAxis.selectAll('line')
     .style('stroke', '#333333');
@@ -277,11 +304,11 @@ function createLineChart(data) {
     .style('fill', '#484B5B')
     .text(d => d.sessions);
 
-  // Add title
+  // Add title (left-aligned)
   svg.append('text')
-    .attr('x', (width + margin.left + margin.right) / 2)
+    .attr('x', margin.left)
     .attr('y', 30)
-    .attr('text-anchor', 'middle')
+    .attr('text-anchor', 'start')
     .style('font-size', '16px')
     .style('font-weight', '600')
     .style('fill', '#484B5B')
@@ -393,7 +420,7 @@ function loadIconsAsDataUris(chartData, iconMap) {
   const promises = chartData.map(d => {
     const iconPath = iconMap[d.source];
     console.log('Loading icon for', d.source, 'from', iconPath);
-    
+
     return fetch(iconPath)
       .then(response => {
         if (!response.ok) {
@@ -407,11 +434,11 @@ function loadIconsAsDataUris(chartData, iconMap) {
           console.error('Empty SVG for', d.source);
           return { source: d.source, dataUri: '' };
         }
-        
+
         // Fix SVG attributes - replace em units with actual pixel values
         svgText = svgText.replace(/width="1em"/g, 'width="24"');
         svgText = svgText.replace(/height="1em"/g, 'height="24"');
-        
+
         // Encode SVG as data URI directly
         const encoded = btoa(unescape(encodeURIComponent(svgText)));
         const dataUri = `data:image/svg+xml;base64,${encoded}`;
@@ -423,7 +450,7 @@ function loadIconsAsDataUris(chartData, iconMap) {
         return { source: d.source, dataUri: '' };
       });
   });
-  
+
   return Promise.all(promises).then(results => {
     const map = {};
     results.forEach(r => {
@@ -448,6 +475,7 @@ function renderDoughnutSvg(chartData, iconDataMap) {
     .attr('width', totalWidth)
     .attr('height', chartHeight)
     .attr('viewBox', `0 0 ${totalWidth} ${chartHeight}`)
+    .attr('font-family', "'Inter', -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif")
     .style('background', 'transparent');
 
   const g = svg.append('g')
@@ -489,21 +517,21 @@ function renderDoughnutSvg(chartData, iconDataMap) {
       return percentage >= 5 ? percentage.toFixed(1) + '%' : '';
     });
 
-  // Add title - centered over the entire component (chart + legend)
+  // Add title - left-aligned for chart + legend
   svg.append('text')
-    .attr('x', totalWidth / 2)
+    .attr('x', 20) // small left padding
     .attr('y', 30)
-    .attr('text-anchor', 'middle')
+    .attr('text-anchor', 'start')
     .style('font-size', '16px')
     .style('font-weight', '600')
     .style('fill', '#484B5B')
     .text('AI Traffic Breakdown by Source');
 
   currentSvg = svg;
-  
+
   // For export: create SVG version of legend with embedded icons
   createSvgLegend(svg, chartData, iconDataMap, chartWidth, chartHeight);
-  
+
   document.getElementById('chartContainer').classList.add('doughnut-mode');
   document.getElementById('chartContainer').style.display = 'flex';
   document.getElementById('downloadChart').style.display = 'inline-block';
@@ -513,30 +541,30 @@ function renderDoughnutSvg(chartData, iconDataMap) {
 function createSvgLegend(svg, chartData, iconDataMap, chartWidth, chartHeight) {
   // Remove any existing SVG legend first
   svg.select('.svg-legend').remove();
-  
+
   // Calculate spacing - reduced to 300px height
   const legendHeight = 300;
   const itemSpacing = legendHeight / (chartData.length - 1);
-  
+
   // Center legend at same height as doughnut center
   const doughnutCenterY = chartHeight / 2 + 25;
   const legendStartY = doughnutCenterY - ((chartData.length - 1) * itemSpacing) / 2;
-  
+
   const legendGroup = svg.append('g')
     .attr('class', 'svg-legend')
     .attr('transform', `translate(${chartWidth + 90}, ${legendStartY})`);
-  
+
   chartData.forEach((d, i) => {
     const legendItem = legendGroup.append('g')
       .attr('transform', `translate(0, ${i * itemSpacing})`);
-    
+
     // Color circle
     legendItem.append('circle')
       .attr('cx', 8)
       .attr('cy', 12)
-      .attr('r', 8)
+      .attr('r', 6)
       .attr('fill', d.color);
-    
+
     // Load and embed icon as image with data URI
     const dataUri = iconDataMap[d.source];
     console.log('Adding icon for', d.source, 'dataUri exists:', !!dataUri);
