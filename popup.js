@@ -103,14 +103,15 @@ function parseOverTimeData(input) {
   const lines = input.split('\n').filter(line => line.trim());
   const data = [];
 
-  // Skip header row and empty first data row
-  for (let i = 2; i < lines.length; i++) {
+  // Skip header row only
+  for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split('\t');
     if (cols.length >= 3) {
       data.push({
         month: parseInt(cols[0]),
         sessions: parseInt(cols[1]),
-        monthName: cols[2]
+        monthName: cols[2],
+        uniqueKey: `${cols[2]}_${i}` // Unique identifier for x-axis
       });
     }
   }
@@ -163,7 +164,7 @@ function createLineChart(data) {
 
   // Set up scales
   const x = d3.scalePoint()
-    .domain(data.map(d => d.monthName))
+    .domain(data.map(d => d.uniqueKey))
     .range([0, width])
     .padding(0);
 
@@ -203,7 +204,7 @@ function createLineChart(data) {
   // Add X axis
   const xAxis = g.append('g')
     .attr('transform', `translate(0,${height})`)
-    .call(d3.axisBottom(x));
+    .call(d3.axisBottom(x).tickFormat((d, i) => data[i].monthName));
 
   xAxis.selectAll('text')
     .style('font-size', '12px')
@@ -234,13 +235,13 @@ function createLineChart(data) {
 
   // Create line generator
   const line = d3.line()
-    .x(d => x(d.monthName))
+    .x(d => x(d.uniqueKey))
     .y(d => y(d.sessions))
     .curve(d3.curveCardinal.tension(0.7));
 
   // Create area generator for shadow
   const area = d3.area()
-    .x(d => x(d.monthName))
+    .x(d => x(d.uniqueKey))
     .y0(height)
     .y1(d => y(d.sessions))
     .curve(d3.curveCardinal.tension(0.7));
@@ -283,7 +284,7 @@ function createLineChart(data) {
     .data(data)
     .enter()
     .append('circle')
-    .attr('cx', d => x(d.monthName))
+    .attr('cx', d => x(d.uniqueKey))
     .attr('cy', d => y(d.sessions))
     .attr('r', 5)
     .attr('fill', '#53ff45')
@@ -296,7 +297,7 @@ function createLineChart(data) {
     .enter()
     .append('text')
     .attr('class', 'label')
-    .attr('x', d => x(d.monthName))
+    .attr('x', d => x(d.uniqueKey))
     .attr('y', d => y(d.sessions) - 10)
     .attr('text-anchor', 'middle')
     .style('font-size', '11px')
