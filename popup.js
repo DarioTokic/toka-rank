@@ -127,11 +127,15 @@ function parseBreakdownData(input) {
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split('\t');
     if (cols.length >= 3) {
-      data.push({
-        month: parseInt(cols[0]),
-        source: cols[1],
-        sessions: parseInt(cols[2])
-      });
+      const source = cols[1];
+      // Filter out "(not set)" and "(direct)" rows
+      if (source !== '(not set)' && source !== '(direct)') {
+        data.push({
+          month: parseInt(cols[0]),
+          source: source,
+          sessions: parseInt(cols[2])
+        });
+      }
     }
   }
 
@@ -370,7 +374,9 @@ function createDoughnutChart(data) {
     'copilot.microsoft.com': '#6B4CD6',
     'claude.ai': '#DA7A59',
     'grok.com': '#111111',
-    'poe.com': '#B92B27'
+    'poe.com': '#B92B27',
+    'quillbot.com': '#FFB81C',
+    'character.ai': '#FF6B9D'
   };
 
   // Map sources to icon files
@@ -381,7 +387,9 @@ function createDoughnutChart(data) {
     'perplexity.ai': 'icons/perplexity-icon.svg',
     'claude.ai': 'icons/claude-icon.svg',
     'grok.com': 'icons/grok-icon.svg',
-    'poe.com': 'icons/poe-icon.svg'
+    'poe.com': 'icons/poe-icon.svg',
+    'quillbot.com': 'icons/quillbot-icon.svg',
+    'character.ai': 'icons/character-ai-icon.svg'
   };
 
   const chartData = sources.map((source, i) => ({
