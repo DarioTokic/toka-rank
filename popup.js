@@ -17,6 +17,33 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   });
 });
 
+// Blur numbers button
+document.getElementById('blurrNumbers').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    function: () => {
+      // const scorecards = document.querySelectorAll('[data-guidedhelpid="scorecard_0"], [data-guidedhelpid="scorecard_1"]');
+      const scorecards = document.querySelectorAll('.nnLLaf.CJvxcd');
+      let blurredCount = 0;
+
+      scorecards.forEach(element => {
+        if (!element.classList.contains('blurred-scorecard')) {
+          element.classList.add('blurred-scorecard');
+          element.style.filter = 'blur(5px)';
+          blurredCount++;
+        } else {
+          element.classList.remove('blurred-scorecard');
+          element.style.filter = 'none';
+        }
+      });
+
+      console.log(`Toggled blur on ${blurredCount} scorecards`);
+    }
+  });
+});
+
 // Download chart button
 document.getElementById('downloadChart').addEventListener('click', () => {
   if (!currentSvg) return;

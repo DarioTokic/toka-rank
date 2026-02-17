@@ -226,12 +226,12 @@
       flex-direction: column;
       gap: 16px;
     }
-    
+
     /* Hide HTML legend for doughnut, show SVG legend instead */
     #chartContainer.doughnut-mode #customLegend {
       display: none;
     }
-    
+
     #chartContainer.doughnut-mode .svg-legend {
       display: block;
     }
@@ -274,6 +274,7 @@
   <div class="button-group">
     <button id="processData">Process Data</button>
     <button id="downloadChart" class="btn-secondary" style="display: none;" disabled>Download Image</button>
+    <button id="blurrNumbers" class="btn-secondary">Blurr Numbers</button>
   </div>
 
   <div id="chartContainer" style="display: none;">
