@@ -17,6 +17,24 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   }
 });
 
+function downloadBlob(blob, name, format) {
+  try {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const ts = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
+    const filename = `${name}-growth-${ts}.${format}`;
+    link.download = filename;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    alert('Error creating download link: ' + error.message);
+    console.error('Download error:', error);
+  }
+}
+
 // Mode toggle
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -168,6 +186,11 @@ document.getElementById('screenshotComponent').addEventListener('click', async (
   const bounds = elementData[0].result;
   let name = bounds.name;
 
+  // Validate bounds
+  if (!bounds.width || !bounds.height || bounds.width <= 0 || bounds.height <= 0) {
+    alert('Element has invalid dimensions. Try zooming or refreshing the page.');
+    return;
+  }
 
   // Filter out URL-like parts
   name = name
@@ -184,6 +207,9 @@ document.getElementById('screenshotComponent').addEventListener('click', async (
   const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
 
   const img = new Image();
+  img.onerror = function () {
+    alert('Failed to load screenshot image');
+  };
   img.onload = function () {
     const canvas = document.createElement('canvas');
     canvas.width = bounds.width;
@@ -196,17 +222,12 @@ document.getElementById('screenshotComponent').addEventListener('click', async (
     );
 
     canvas.toBlob(blob => {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const now = new Date();
-      const pad = n => String(n).padStart(2, '0');
-      const ts = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
-      const filename = `${name}-growth-${ts}.webp`;
-      link.download = filename;
-      link.href = url;
-      link.click();
-      URL.revokeObjectURL(url);
-    }, 'image/webp', 0.95);
+      if (!blob) {
+        alert('Failed to create image blob.');
+        return;
+      }
+      downloadBlob(blob, name, 'png');
+    }, 'image/png');
   };
 
   img.src = screenshot;
