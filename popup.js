@@ -58,7 +58,7 @@ document.getElementById('blurrNumbers').addEventListener('click', async () => {
 function parseValue(str) {
   const cleanStr = str.toLowerCase().trim();
   let multiplier = 1;
-  
+
   if (cleanStr.endsWith('k')) {
     multiplier = 1000;
   } else if (cleanStr.endsWith('m')) {
@@ -66,7 +66,7 @@ function parseValue(str) {
   } else if (cleanStr.endsWith('b')) {
     multiplier = 1000000000;
   }
-  
+
   const numStr = cleanStr.replace(/[^0-9.]/g, '');
   return parseFloat(numStr) * multiplier;
 }
@@ -85,27 +85,117 @@ function formatValue(num) {
 function updateGrowthDisplay(values) {
   // values[0] and values[1] are for Clicks (newer, older)
   // values[2] and values[3] are for Impressions (newer, older)
-  
+
   const clicksNewer = parseValue(values[0]);
   const clicksOlder = parseValue(values[1]);
   const impressionsNewer = parseValue(values[2]);
   const impressionsOlder = parseValue(values[3]);
-  
+
   const clicksGrowth = ((clicksNewer - clicksOlder) / clicksOlder) * 100;
   const impressionsGrowth = ((impressionsNewer - impressionsOlder) / impressionsOlder) * 100;
-  
+
   const clicksFormatted = formatValue(clicksNewer);
   const impressionsFormatted = formatValue(impressionsNewer);
-  
+
   let growthDisplay = document.getElementById('growthDisplay');
   if (!growthDisplay) {
     growthDisplay = document.createElement('div');
     growthDisplay.id = 'growthDisplay';
     document.querySelector('.button-group').appendChild(growthDisplay);
   }
-  
+
   growthDisplay.textContent = `Impressions: ${impressionsFormatted} / +~${impressionsGrowth.toFixed(0)}% | Clicks: ${clicksFormatted} / +~${clicksGrowth.toFixed(0)}%`;
 }
+
+// Screenshot component button
+document.getElementById('screenshotComponent').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  const elementData = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    function: () => {
+      const element = document.querySelector('.F6BDp');
+      const nameElements = document.querySelectorAll('.whsOnd.zHQkBf');
+      const nameElement = nameElements[1]; // Get the second one
+
+      if (!element) {
+        console.error('Element with class .F6BDp not found');
+        return null;
+      }
+
+      const rect = element.getBoundingClientRect();
+      let name = 'component';
+
+      if (nameElement) {
+        const ariaLabel = nameElement.getAttribute('data-initial-value');
+        const textContent = nameElement.textContent.trim();
+        name = ariaLabel || textContent;
+      } else {
+        console.warn('Name element not found');
+      }
+
+
+      return {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+        name: name
+      };
+    }
+  });
+
+  if (!elementData || !elementData[0] || !elementData[0].result) {
+    alert('Element with class .F6BDp not found');
+    return;
+  }
+
+  const bounds = elementData[0].result;
+  let name = bounds.name;
+
+
+  // Filter out URL-like parts
+  name = name
+    .replace(/https?:\/\//g, '')
+    .replace(/www\./g, '')
+    .replace(/\.(com|co\.uk|io|ai|net|org|edu|gov)/gi, '')
+    .replace(/\//g, '')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .toLowerCase();
+
+
+  const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+
+  const img = new Image();
+  img.onload = function () {
+    const canvas = document.createElement('canvas');
+    canvas.width = bounds.width;
+    canvas.height = bounds.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(
+      img,
+      bounds.x, bounds.y, bounds.width, bounds.height,
+      0, 0, bounds.width, bounds.height
+    );
+
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const ts = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
+      const filename = `${name}-growth-${ts}.webp`;
+      link.download = filename;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    }, 'image/webp', 0.95);
+  };
+
+  img.src = screenshot;
+});
 
 // Download chart button
 document.getElementById('downloadChart').addEventListener('click', () => {
