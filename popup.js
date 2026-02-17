@@ -2,6 +2,21 @@ let currentMode = 'overtime';
 let parsedData = null;
 let currentSvg = null;
 
+// Check if current page is Google Search and disable buttons accordingly
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  const currentTab = tabs[0];
+  if (currentTab && currentTab.url) {
+    const isGoogleSearch = currentTab.url.startsWith('https://search.google.com');
+    const blurrBtn = document.getElementById('blurrNumbers');
+    const screenshotBtn = document.getElementById('screenshotComponent');
+    
+    if (!isGoogleSearch) {
+      blurrBtn.disabled = true;
+      screenshotBtn.disabled = true;
+    }
+  }
+});
+
 // Mode toggle
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', () => {
