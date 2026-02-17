@@ -21,14 +21,19 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 document.getElementById('blurrNumbers').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  await chrome.scripting.executeScript({
+  const result = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     function: () => {
-      // const scorecards = document.querySelectorAll('[data-guidedhelpid="scorecard_0"], [data-guidedhelpid="scorecard_1"]');
       const scorecards = document.querySelectorAll('.nnLLaf.CJvxcd');
       let blurredCount = 0;
+      const values = [];
 
-      scorecards.forEach(element => {
+      scorecards.forEach((element, index) => {
+        if (index < 4) {
+          const text = element.textContent.trim();
+          values.push(text);
+        }
+
         if (!element.classList.contains('blurred-scorecard')) {
           element.classList.add('blurred-scorecard');
           element.style.filter = 'blur(5px)';
@@ -40,9 +45,67 @@ document.getElementById('blurrNumbers').addEventListener('click', async () => {
       });
 
       console.log(`Toggled blur on ${blurredCount} scorecards`);
+      return values;
     }
   });
+
+  if (result && result[0] && result[0].result && result[0].result.length === 4) {
+    const values = result[0].result;
+    updateGrowthDisplay(values);
+  }
 });
+
+function parseValue(str) {
+  const cleanStr = str.toLowerCase().trim();
+  let multiplier = 1;
+  
+  if (cleanStr.endsWith('k')) {
+    multiplier = 1000;
+  } else if (cleanStr.endsWith('m')) {
+    multiplier = 1000000;
+  } else if (cleanStr.endsWith('b')) {
+    multiplier = 1000000000;
+  }
+  
+  const numStr = cleanStr.replace(/[^0-9.]/g, '');
+  return parseFloat(numStr) * multiplier;
+}
+
+function formatValue(num) {
+  if (num >= 1000000) {
+    const m = num / 1000000;
+    return (m >= 1 ? m.toFixed(2) : m.toFixed(1)).replace(/\.0+$/, '') + 'M';
+  } else if (num >= 1000) {
+    const k = num / 1000;
+    return (k >= 1 ? k.toFixed(2) : k.toFixed(1)).replace(/\.0+$/, '') + 'K';
+  }
+  return num.toFixed(0);
+}
+
+function updateGrowthDisplay(values) {
+  // values[0] and values[1] are for Clicks (newer, older)
+  // values[2] and values[3] are for Impressions (newer, older)
+  
+  const clicksNewer = parseValue(values[0]);
+  const clicksOlder = parseValue(values[1]);
+  const impressionsNewer = parseValue(values[2]);
+  const impressionsOlder = parseValue(values[3]);
+  
+  const clicksGrowth = ((clicksNewer - clicksOlder) / clicksOlder) * 100;
+  const impressionsGrowth = ((impressionsNewer - impressionsOlder) / impressionsOlder) * 100;
+  
+  const clicksFormatted = formatValue(clicksNewer);
+  const impressionsFormatted = formatValue(impressionsNewer);
+  
+  let growthDisplay = document.getElementById('growthDisplay');
+  if (!growthDisplay) {
+    growthDisplay = document.createElement('div');
+    growthDisplay.id = 'growthDisplay';
+    document.querySelector('.button-group').appendChild(growthDisplay);
+  }
+  
+  growthDisplay.textContent = `Impressions: ${impressionsFormatted} / +~${impressionsGrowth.toFixed(0)}% | Clicks: ${clicksFormatted} / +~${clicksGrowth.toFixed(0)}%`;
+}
 
 // Download chart button
 document.getElementById('downloadChart').addEventListener('click', () => {
